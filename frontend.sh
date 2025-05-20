@@ -56,11 +56,12 @@ curl -o /tmp/frontend.zip https://roboshop-artifacts.s3.amazonaws.com/frontend-v
 validate $? "Downloading frontend content"
 
 # Extract frontend content
-cd /usr/share/nginx/html
+cd /usr/share/nginx/html || exit 1
 unzip /tmp/frontend.zip >> "$LOG_FILE" 2>&1
 validate $? "Extracting frontend content"
 
 # Configure nginx.conf
+>/etc/nginx/nginx.conf
 cat > /etc/nginx/nginx.conf << 'EOF'
 user nginx;
 worker_processes auto;
