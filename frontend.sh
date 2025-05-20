@@ -8,6 +8,7 @@ N="\e[0m"
 LOGS_FOLDER="/var/log/roboshop-logs"
 SCRIPT_NAME=$(basename "$0" | cut -d"." -f1)
 LOG_FILE="${LOGS_FOLDER}/${SCRIPT_NAME}.log"
+SCRIPT_DIR=$PWD
 
 mkdir -p "$LOGS_FOLDER"
 
@@ -29,104 +30,74 @@ validate() {
     fi
 }
 
-# Disable and enable nginx module
-dnf module disable nginx -y >> "$LOG_FILE" 2>&1
-validate $? "Disabling nginx module"
+# Disable nginx module only if enabled
+if dnf module list nginx | grep -qE '^\s*nginx\s+[^\s]+\s+enabled'; then
+    dnf module disable nginx -y >> "$LOG_FILE" 2>&1
+    validate $? "Disabling nginx module"
+else
+    echo "nginx module already disabled" | tee -a "$LOG_FILE"
+fi
 
-dnf module enable nginx:1.24 -y >> "$LOG_FILE" 2>&1
-validate $? "Enabling nginx:1.24 module"
+# Enable nginx:1.24 module only if not already enabled
+if ! dnf module list nginx:1.24 | grep -qE '^\s*nginx\s+1.24\s+enabled'; then
+    dnf module enable nginx:1.24 -y >> "$LOG_FILE" 2>&1
+    validate $? "Enabling nginx:1.24 module"
+else
+    echo "nginx:1.24 module already enabled" | tee -a "$LOG_FILE"
+fi
 
-# Install nginx
-dnf install nginx -y >> "$LOG_FILE" 2>&1
-validate $? "Installing nginx"
+# Install nginx only if not installed
+if ! rpm -q nginx &>/dev/null; then
+    dnf install nginx -y >> "$LOG_FILE" 2>&1
+    validate $? "Installing nginx"
+else
+    echo "nginx already installed" | tee -a "$LOG_FILE"
+fi
 
-# Start and enable nginx
+# Enable nginx service
 systemctl enable nginx >> "$LOG_FILE" 2>&1
 validate $? "Enabling nginx service"
 
-systemctl start nginx >> "$LOG_FILE" 2>&1
-validate $? "Starting nginx service"
+# Start nginx service if not running
+if ! systemctl is-active --quiet nginx; then
+    systemctl start nginx >> "$LOG_FILE" 2>&1
+    validate $? "Starting nginx service"
+else
+    echo "nginx service already running" | tee -a "$LOG_FILE"
+fi
 
-# Remove default content
-rm -rf /usr/share/nginx/html/* >> "$LOG_FILE" 2>&1
-validate $? "Removing default nginx content"
+# Remove default content only if files exist
+if [ "$(ls -A /usr/share/nginx/html 2>/dev/null)" ]; then
+    rm -rf /usr/share/nginx/html/* >> "$LOG_FILE" 2>&1
+    validate $? "Removing default nginx content"
+else
+    echo "No default nginx content to remove" | tee -a "$LOG_FILE"
+fi
 
-# Download frontend content
-curl -o /tmp/frontend.zip https://roboshop-artifacts.s3.amazonaws.com/frontend-v3.zip >> "$LOG_FILE" 2>&1
-validate $? "Downloading frontend content"
+# Download frontend content only if not already downloaded
+if [ ! -f /tmp/frontend.zip ]; then
+    curl -o /tmp/frontend.zip https://roboshop-artifacts.s3.amazonaws.com/frontend-v3.zip >> "$LOG_FILE" 2>&1
+    validate $? "Downloading frontend content"
+else
+    echo "frontend.zip already downloaded" | tee -a "$LOG_FILE"
+fi
 
-# Extract frontend content
+# Extract frontend content only if not already extracted
 cd /usr/share/nginx/html || exit 1
-unzip /tmp/frontend.zip >> "$LOG_FILE" 2>&1
-validate $? "Extracting frontend content"
+if [ ! -f index.html ]; then
+    unzip /tmp/frontend.zip >> "$LOG_FILE" 2>&1
+    validate $? "Extracting frontend content"
+else
+    echo "Frontend content already extracted" | tee -a "$LOG_FILE"
+fi
 
-# Configure nginx.conf
->/etc/nginx/nginx.conf
-cat > /etc/nginx/nginx.conf << 'EOF'
-user nginx;
-worker_processes auto;
-error_log /var/log/nginx/error.log notice;
-pid /run/nginx.pid;
-
-include /usr/share/nginx/modules/*.conf;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
-                      '$status $body_bytes_sent "$http_referer" '
-                      '"$http_user_agent" "$http_x_forwarded_for"';
-
-    access_log  /var/log/nginx/access.log  main;
-
-    sendfile            on;
-    tcp_nopush          on;
-    keepalive_timeout   65;
-    types_hash_max_size 4096;
-
-    include             /etc/nginx/mime.types;
-    default_type        application/octet-stream;
-
-    include /etc/nginx/conf.d/*.conf;
-
-    server {
-        listen       80;
-        listen       [::]:80;
-        server_name  _;
-        root         /usr/share/nginx/html;
-
-        include /etc/nginx/default.d/*.conf;
-
-        error_page 404 /404.html;
-        location = /404.html {
-        }
-
-        error_page 500 502 503 504 /50x.html;
-        location = /50x.html {
-        }
-
-        location /images/ {
-          expires 5s;
-          root   /usr/share/nginx/html;
-          try_files $uri /images/placeholder.jpg;
-        }
-        location /api/catalogue/ { proxy_pass http://catalogue.daws86s.site:8080/; }
-        location /api/user/ { proxy_pass http://localhost:8080/; }
-        location /api/cart/ { proxy_pass http://localhost:8080/; }
-        location /api/shipping/ { proxy_pass http://localhost:8080/; }
-        location /api/payment/ { proxy_pass http://localhost:8080/; }
-
-        location /health {
-          stub_status on;
-          access_log off;
-        }
-
-    }
-}
-EOF
-validate $? "Configuring nginx.conf"
+# Copy nginx.conf only if different
+if ! cmp -s "$SCRIPT_DIR/nginx.conf" /etc/nginx/nginx.conf; then
+    cp "$SCRIPT_DIR/nginx.conf" /etc/nginx/nginx.conf >> "$LOG_FILE" 2>&1
+    validate $? "Configuring nginx.conf"
+else
+    echo "nginx.conf already up to date" | tee -a "$LOG_FILE"
+fi
 
 # Restart nginx to apply changes
 systemctl restart nginx >> "$LOG_FILE" 2>&1
