@@ -33,11 +33,11 @@ validate() {
 }
 
 # Disable nodejs module
-dnf disable module nodejs -y >> "$LOG_FILE"
+dnf module disable nodejs -y >> "$LOG_FILE"
 validate $? "Disabling nodejs module"
 
 # Enable nodejs:20 module
-dnf enable module nodejs:20 -y >> "$LOG_FILE"
+dnf module enable nodejs:20 -y >> "$LOG_FILE"
 validate $? "Enabling nodejs module"
 
 # Install nodejs
