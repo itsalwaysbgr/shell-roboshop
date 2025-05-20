@@ -9,7 +9,6 @@ LOGS_FOLDER="/var/log/roboshop-logs"
 SCRIPT_NAME=$(echo $0 | cut -d"." -f1)
 LOG_FILE="${LOGS_FOLDER}/${SCRIPT_NAME}.log"
 
-
 mkdir -p "$LOGS_FOLDER"
 
 if [ "$USERID" -ne 0 ]; then
@@ -28,21 +27,22 @@ validate() {
         exit 1
     fi
 }
+
 cp mongo.repo /etc/yum.repos.d/mongodb.repo
-VALIDATE $? "Copying mongodb.repo file"
+validate $? "Copying mongodb.repo file"
 
 dnf install mongodb-org -y >> "$LOG_FILE"
-VALIDATE $? "Installing mongodb-org"
+validate $? "Installing mongodb-org"
 
 systemctl enable mongod >> "$LOG_FILE"
-VALIDATE $? "Enabling mongod service"
+validate $? "Enabling mongod service"
 
 # Start the MongoDB service
 systemctl start mongod >> "$LOG_FILE"
-VALIDATE $? "Starting mongod service"
+validate $? "Starting mongod service"
 
 sed -i -e 's/127.0.0.1/0.0.0.0/g' /etc/mongod.conf
-VALIDATE $? "Editing /etc/mongod.conf file for remote connections"
+validate $? "Editing /etc/mongod.conf file for remote connections"
 
 systemctl restart mongod >> "$LOG_FILE"
-VALIDATE $? "Restarting mongod service"
+validate $? "Restarting mongod service"
