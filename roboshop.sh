@@ -9,6 +9,8 @@ DOMAIN_NAME="daws86s.site"
 
 for instance in "${INSTANCES[@]}"
 do
+    echo "Launching instance: $instance"
+
     INSTANCE_ID=$(aws ec2 run-instances \
         --image-id "$AMI_ID" \
         --instance-type t3.micro \
@@ -17,28 +19,38 @@ do
         --query 'Instances[0].InstanceId' \
         --output text)
 
+    if [ -z "$INSTANCE_ID" ]; then
+        echo "Failed to launch instance $instance. Skipping."
+        continue
+    fi
+
     echo "Launched instance $instance with ID $INSTANCE_ID"
 
     # Wait until instance is running
     aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 
-    # Fetch private IP for all, or public IP for frontend
-    if [ "$instance" != "frontend" ]; then
-        IP=$(aws ec2 describe-instances \
-            --instance-ids "$INSTANCE_ID" \
-            --query 'Reservations[0].Instances[0].PrivateIpAddress' \
-            --output text)
-    else
+    # Fetch IP: private for all except frontend (public IP)
+    if [ "$instance" == "frontend" ]; then
         IP=$(aws ec2 describe-instances \
             --instance-ids "$INSTANCE_ID" \
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
         echo "Frontend instance has public IP: $IP"
+    else
+        IP=$(aws ec2 describe-instances \
+            --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].PrivateIpAddress' \
+            --output text)
+    fi
+
+    if [ -z "$IP" ]; then
+        echo "Could not get IP address for $instance. Skipping DNS update."
+        continue
     fi
 
     echo "$instance -> $IP"
 
-    # Create or update DNS record
+    # Create or update A record in Route 53
     aws route53 change-resource-record-sets \
       --hosted-zone-id "$ZONE_ID" \
       --change-batch "{
@@ -56,4 +68,8 @@ do
         }]
       }"
 
+    echo "DNS record for $instance.$DOMAIN_NAME -> $IP created/updated."
+
+    # Small delay to avoid API throttling
+    sleep 2
 done
