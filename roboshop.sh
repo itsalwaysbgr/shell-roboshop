@@ -11,7 +11,7 @@ for instance in "${INSTANCES[@]}"
 do
     INSTANCE_ID=$(aws ec2 run-instances \
         --image-id "$AMI_ID" \
-        --instance-type t2.micro \
+        --instance-type t3.micro \
         --security-group-ids "$SG_ID" \
         --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$instance}]" \
         --query 'Instances[0].InstanceId' \
@@ -19,9 +19,10 @@ do
 
     echo "Launched instance $instance with ID $INSTANCE_ID"
 
-    # Wait for the instance to be in 'running' state before fetching IP
+    # Wait until instance is running
     aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
 
+    # Fetch private IP for all, or public IP for frontend
     if [ "$instance" != "frontend" ]; then
         IP=$(aws ec2 describe-instances \
             --instance-ids "$INSTANCE_ID" \
@@ -32,21 +33,21 @@ do
             --instance-ids "$INSTANCE_ID" \
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
-        echo "Instance $instance has public IP address $IP"
+        echo "Frontend instance has public IP: $IP"
     fi
 
     echo "$instance -> $IP"
 
-    # Create Route 53 record for each instance
+    # Create or update DNS record
     aws route53 change-resource-record-sets \
       --hosted-zone-id "$ZONE_ID" \
       --change-batch "{
-        \"Comment\": \"Creating a record set for $instance\",
+        \"Comment\": \"Upserting A record for $instance\",
         \"Changes\": [{
-          \"Action\": \"CREATE\",
+          \"Action\": \"UPSERT\",
           \"ResourceRecordSet\": {
             \"Name\": \"$instance.$DOMAIN_NAME\",
-            \"Type\": \"CNAME\",
+            \"Type\": \"A\",
             \"TTL\": 120,
             \"ResourceRecords\": [{
               \"Value\": \"$IP\"
@@ -54,4 +55,5 @@ do
           }
         }]
       }"
+
 done
