@@ -48,7 +48,7 @@ do
           \"ResourceRecordSet\": {
             \"Name\": \"$instance.$DOMAIN_NAME\",
             \"Type\": \"A\",
-            \"TTL\": 120,
+            \"TTL\": 1,
             \"ResourceRecords\": [{
               \"Value\": \"$IP\"
             }]
