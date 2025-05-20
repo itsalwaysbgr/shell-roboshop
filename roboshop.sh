@@ -36,4 +36,22 @@ do
     fi
 
     echo "$instance -> $IP"
+
+    # Create Route 53 record for each instance
+    aws route53 change-resource-record-sets \
+      --hosted-zone-id "$ZONE_ID" \
+      --change-batch "{
+        \"Comment\": \"Creating a record set for $instance\",
+        \"Changes\": [{
+          \"Action\": \"CREATE\",
+          \"ResourceRecordSet\": {
+            \"Name\": \"$instance.$DOMAIN_NAME\",
+            \"Type\": \"CNAME\",
+            \"TTL\": 120,
+            \"ResourceRecords\": [{
+              \"Value\": \"$IP\"
+            }]
+          }
+        }]
+      }"
 done
