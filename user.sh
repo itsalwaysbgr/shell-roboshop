@@ -1,12 +1,11 @@
 #!/bin/bash
 
+START_TIME=$(date +%s)
 USERID=$(id -u)
 R="\e[31m"
 G="\e[32m"
 Y="\e[33m"
 N="\e[0m"
-
-START_TIME=$(date +%s)
 LOGS_FOLDER="/var/log/roboshop-logs"
 SCRIPT_NAME=$(echo $0 | cut -d "." -f1)
 LOG_FILE="$LOGS_FOLDER/$SCRIPT_NAME.log"
@@ -76,8 +75,6 @@ systemctl start user
 VALIDATE $? "Starting user"
 
 END_TIME=$(date +%s)
-DIFF_TIME=$((END_TIME - START_TIME))
-echo "Script execution time: $((DIFF_TIME / 60)) minutes and $((DIFF_TIME % 60)) seconds" | tee -a "$LOG_FILE"
-echo "Script started at: $(date)" | tee -a "$LOG_FILE"
-echo "Script completed at: $(date)" | tee -a "$LOG_FILE"
-echo -e "$G User installation completed successfully $N" | tee -a "$LOG_FILE"
+TOTAL_TIME=$(( $END_TIME - $START_TIME ))
+
+echo -e "Script exection completed successfully, $Y time taken: $TOTAL_TIME seconds $N" | tee -a $LOG_FILE
